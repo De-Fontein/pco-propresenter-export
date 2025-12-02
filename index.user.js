@@ -415,7 +415,7 @@
             // Filter out empty sections
             const filteredLyrics = this._filterEmptySections(lyricsText);
 
-            const filename = this._sanitizeFilename(`${itemName}`);
+            const filename = this._sanitizeFilename(`${itemName}.txt`);
             const blob = new Blob([filteredLyrics], { type: "text/plain;charset=utf-8" });
             const url = URL.createObjectURL(blob);
             try {
