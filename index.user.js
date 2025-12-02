@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PCO ProPresenter Export
 // @namespace    https://github.com/Auxority/pco-propresenter-export
-// @version      0.6.0
+// @version      0.7.0
 // @description  Export PCO service plan arrangement lyrics as .txt files. Tampermonkey menu trigger, PKCE OAuth, token storage & refresh.
 // @match        https://services.planningcenteronline.com/*
 // @grant        GM_setValue
@@ -412,8 +412,11 @@
             const lyricsText = String(rawLyrics).replace(/\r\n/g, "\n").trim();
             if (!lyricsText) continue;
 
+            // Filter out empty sections
+            const filteredLyrics = this._filterEmptySections(lyricsText);
+
             const filename = this._sanitizeFilename(`${itemName}`);
-            const blob = new Blob([lyricsText], { type: "text/plain;charset=utf-8" });
+            const blob = new Blob([filteredLyrics], { type: "text/plain;charset=utf-8" });
             const url = URL.createObjectURL(blob);
             try {
               GM_download({
@@ -446,6 +449,15 @@
 
     _sanitizeFilename(name) {
       return String(name).replace(/[\/\\?%*:|"<>]/g, "-").slice(0, 200);
+    }
+
+    _filterEmptySections(text) {
+      if (!text) return "";
+
+      return text
+        .split(/\n\n+/)
+        .filter(section => section.trim().split(/\r?\n/).length > 1)
+        .join("\n\n");
     }
   }
 
