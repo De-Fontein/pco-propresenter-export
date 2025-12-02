@@ -385,7 +385,7 @@
             const lyricsText = String(rawLyrics).replace(/\r\n/g, "\n").trim();
             if (!lyricsText) continue;
 
-            const filename = this._sanitizeFilename(`${itemName} - ${arrId}.txt`);
+            const filename = this._sanitizeFilename(`${itemName}.txt`);
             const blob = new Blob([lyricsText], { type: "text/plain;charset=utf-8" });
             const url = URL.createObjectURL(blob);
             try {
