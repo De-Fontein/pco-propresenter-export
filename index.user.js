@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PCO ProPresenter Export
 // @namespace    https://github.com/Auxority/pco-propresenter-export
-// @version      0.7.0
+// @version      0.8.0
 // @description  Export PCO service plan arrangement lyrics as .txt files. Tampermonkey menu trigger, PKCE OAuth, token storage & refresh.
 // @match        https://services.planningcenteronline.com/*
 // @grant        GM_setValue
