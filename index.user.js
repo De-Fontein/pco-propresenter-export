@@ -14,9 +14,6 @@
 // ==/UserScript==
 
 (async () => {
-  /* ============================
-     Utilities
-     ============================ */
   class PKCEUtils {
     static generateVerifier(length = 64) {
       const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
@@ -37,9 +34,6 @@
     }
   }
 
-  /* ============================
-     OAuth helper (PKCE)
-     ============================ */
   class PCOAuth {
     constructor(clientId, redirectUri, scope) {
       this.clientId = clientId;
@@ -121,9 +115,6 @@
     }
   }
 
-  /* ============================
-     Service API wrapper
-     ============================ */
   class PCOServiceAPI {
     constructor(accessToken) {
       this.accessToken = accessToken;
@@ -151,28 +142,80 @@
     }
   }
 
-  /* ============================
-     Exporter - main logic
-     ============================ */
-  class PCOExporter {
+  class ProPresenterExporter {
     constructor() {
-      // Keep your client id & redirectUri as before
       this.clientId = "845585c27994617f1a04388f76f6457ce6b9b2cfbe01f5b2ed187f479223a7bf";
       this.scope = "services";
       this.redirectUri = "https://services.planningcenteronline.com/dashboard/0";
-      this.tokenStoragePrefix = "pco_export_";
-      // planId is derived at run time (when user selects the Tampermonkey menu command)
+      this.tokenStoragePrefix = "pp_export_";
       this.planId = null;
+    }
 
+    init() {
       // Register Tampermonkey menu command (Button B)
       try {
-        GM_registerMenuCommand("PCO Export — Start", () => this.startFromMenu());
+        GM_registerMenuCommand("PP Export — Start", () => this.startFromMenu());
       } catch (e) {
-        console.warn("[PCO] GM_registerMenuCommand not available:", e);
+        console.warn("[PP] GM_registerMenuCommand not available:", e);
       }
+
+      this.startButtonPolling();
 
       // Listen for auth tab postMessage
       this.setupMessageListener();
+    }
+
+    startButtonPolling() {
+      if (this.buttonPollIntervalId) return; // avoid duplicate intervals
+
+      this.buttonPollIntervalId = setInterval(() => {
+        try {
+          // If our button is already present, nothing to do this tick
+          if (document.querySelector("#pp-export-button")) {
+            return;
+          }
+
+          // Try to find the host button again on the current SPA view
+          const originalButton = document.querySelector(
+            'button[data-testid="order-add-plan-element"]'
+          );
+          if (!originalButton || !originalButton.parentNode) {
+            return; // still not on a plan page or UI not ready
+          }
+
+          // Host button exists and our button does not -> inject
+          this.injectExportButton(originalButton);
+        } catch (e) {
+          console.warn("[PP] Error during button polling:", e);
+        }
+      }, 1000); // every 1s; tweak if desired
+    }
+
+    injectExportButton(originalButton) {
+      try {
+        // Safety: if button already exists, skip
+        if (document.querySelector("#pp-export-button")) return;
+
+        const exportButton = originalButton.cloneNode(true);
+        exportButton.id = "pp-export-button";
+        exportButton.innerText = "ProPresenter Export";
+        exportButton.setAttribute("aria-label", "ProPresenter Export");
+        exportButton.style.backgroundColor = "";
+        exportButton.style.background = "linear-gradient(71deg, #ff6c1a 0%, #ffa235 100%)";
+        exportButton.style.color = "white";
+        exportButton.style.fontWeight = "bold";
+
+        exportButton.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.planId = this._derivePlanIdFromPath(window.location.pathname);
+          await this.performExportFlow();
+        });
+
+        originalButton.parentNode.prepend(exportButton);
+      } catch (err) {
+        console.warn("[PP] Failed to inject export button:", err);
+      }
     }
 
     _derivePlanIdFromPath(pathname) {
@@ -190,7 +233,7 @@
     async startFromMenu() {
       this.planId = this._derivePlanIdFromPath(window.location.pathname);
       if (!this.planId) {
-        alert("PCO Export: Could not determine a plan ID from the current page. Open the plan page (URL should contain the plan ID) and run 'PCO Export — Start' again.");
+        alert("PP Export: Could not determine a plan ID from the current page. Open the plan page (URL should contain the plan ID) and run 'PP Export — Start' again.");
         return;
       }
 
@@ -219,37 +262,21 @@
       GM_setValue(this.tokenStoragePrefix + "refresh_token_expires", 0);
     }
 
-    async _getStoredAccessToken() {
-      return GM_getValue(this.tokenStoragePrefix + "access_token", "");
-    }
-
-    async _getStoredAccessTokenExpiry() {
-      return GM_getValue(this.tokenStoragePrefix + "access_token_expires", 0);
-    }
-
-    async _getStoredRefreshToken() {
-      return GM_getValue(this.tokenStoragePrefix + "refresh_token", "");
-    }
-
-    async _getStoredRefreshTokenExpiry() {
-      return GM_getValue(this.tokenStoragePrefix + "refresh_token_expires", 0);
-    }
-
     async getValidAccessToken() {
-      const accessToken = await this._getStoredAccessToken();
-      const accessExpiry = await this._getStoredAccessTokenExpiry();
       const now = Date.now();
 
+      // Direct read from GM storage
+      const accessToken = GM_getValue(this.tokenStoragePrefix + "access_token", "");
+      const accessExpiry = GM_getValue(this.tokenStoragePrefix + "access_token_expires", 0);
+
       if (accessToken && accessExpiry && now < accessExpiry - 5000) {
-        // still valid
         return accessToken;
       }
 
-      // Try refresh flow
-      const refreshToken = await this._getStoredRefreshToken();
-      const refreshExpiry = await this._getStoredRefreshTokenExpiry();
+      const refreshToken = GM_getValue(this.tokenStoragePrefix + "refresh_token", "");
+      const refreshExpiry = GM_getValue(this.tokenStoragePrefix + "refresh_token_expires", 0);
+
       if (!refreshToken || now >= refreshExpiry) {
-        // No refresh token or expired -> start full auth
         console.debug("[PCO] Refresh token missing or expired; starting full auth flow.");
         this._clearTokenData();
         const auth = new PCOAuth(this.clientId, this.redirectUri, this.scope);
@@ -261,21 +288,21 @@
         console.debug("[PCO] Attempting to refresh access token...");
         const auth = new PCOAuth(this.clientId, this.redirectUri, this.scope);
         const resp = await auth.refreshAccessToken(refreshToken);
-        if (resp && resp.access_token) {
+
+        if (resp?.access_token) {
           this._saveTokenData(resp);
           return resp.access_token;
-        } else {
-          console.warn("[PCO] Refresh endpoint did not return access_token, starting full auth flow.");
-          this._clearTokenData();
-          const auth2 = new PCOAuth(this.clientId, this.redirectUri, this.scope);
-          await auth2.startAuthFlow();
-          return null;
         }
+
+        console.warn("[PCO] Refresh endpoint returned no access_token; starting full auth flow.");
+        this._clearTokenData();
+        await new PCOAuth(this.clientId, this.redirectUri, this.scope).startAuthFlow();
+        return null;
+
       } catch (e) {
         console.error("[PCO] Refresh token request failed:", e);
         this._clearTokenData();
-        const auth = new PCOAuth(this.clientId, this.redirectUri, this.scope);
-        await auth.startAuthFlow();
+        await new PCOAuth(this.clientId, this.redirectUri, this.scope).startAuthFlow();
         return null;
       }
     }
@@ -361,7 +388,8 @@
         // For each item, look up its arrangement by id in the arrangements map and export lyrics from arrangement.attributes.lyrics
         for (const item of items) {
           try {
-            const itemName = (item.attributes && (item.attributes.name || item.attributes.title)) ? (item.attributes.name || item.attributes.title) : `item-${item.id}`;
+            const name = item.attributes && (item.attributes.name || item.attributes.title);
+            const itemName = name ? name : `item-${item.id}`;
             const arrId = item.relationships?.arrangement?.data?.id;
             if (!arrId) {
               // Per your instruction: don't warn; skip silently
@@ -384,29 +412,25 @@
             const lyricsText = String(rawLyrics).replace(/\r\n/g, "\n").trim();
             if (!lyricsText) continue;
 
-            const filename = this._sanitizeFilename(`${itemName}.txt`);
+            const filename = this._sanitizeFilename(`${itemName}`);
             const blob = new Blob([lyricsText], { type: "text/plain;charset=utf-8" });
             const url = URL.createObjectURL(blob);
             try {
               GM_download({
                 url,
                 name: filename,
-                onerror: (err) => console.error("[PCO] GM_download error for", filename, err),
+                onerror: (err) => {
+                  URL.revokeObjectURL(url);
+                  console.error("[PCO] GM_download error for", filename, err);
+                },
                 onload: () => {
+                  URL.revokeObjectURL(url);
                   setTimeout(() => URL.revokeObjectURL(url), 2000);
                   console.debug("[PCO] Download queued:", filename);
                 }
               });
             } catch (dlErr) {
-              // Fallback: anchor download
-              console.warn("[PCO] GM_download failed, falling back to anchor download", dlErr);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = filename;
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
-              setTimeout(() => URL.revokeObjectURL(url), 2000);
+              console.warn("[PCO] GM_download failed", dlErr);
             }
           } catch (itemErr) {
             console.error("[PCO] Error processing item", item, itemErr);
@@ -425,13 +449,15 @@
     }
   }
 
-  /* ============================
-     Initialization
-     ============================ */
-  const exporter = new PCOExporter();
+  function main() {
+    const exporter = new ProPresenterExporter();
+    exporter.init();
 
-  // If we are on the redirect URI page, post the code back and close
-  if (window.location.pathname === "/dashboard/0") {
-    exporter.handleRedirectTab();
+    // If we are on the redirect URI page, post the code back and close
+    if (window.location.pathname === "/dashboard/0") {
+      exporter.handleRedirectTab();
+    }
   }
+
+  main();
 })();
