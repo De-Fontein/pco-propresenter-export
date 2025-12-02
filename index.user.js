@@ -9,10 +9,9 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
 // @grant        GM_download
+// @updateURL    https://raw.githubusercontent.com/De-Fontein/pco-propresenter-export/refs/heads/main/index.user.js
+// @downloadURL  https://raw.githubusercontent.com/De-Fontein/pco-propresenter-export/refs/heads/main/index.user.js
 // ==/UserScript==
-
-// TODO: Convert .txt files to .pro files
-// See https://github.com/jopterhorst/propresenter-import for inspiration on .pro file format (Python implementation)
 
 (async () => {
   /* ============================
