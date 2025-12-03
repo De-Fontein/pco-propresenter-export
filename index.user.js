@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PCO ProPresenter Export
 // @namespace    https://github.com/Auxority/pco-propresenter-export
-// @version      0.8.0
+// @version      0.9.0
 // @description  Export PCO service plan arrangement lyrics as .txt files. Tampermonkey menu trigger, PKCE OAuth, token storage & refresh.
 // @match        https://services.planningcenteronline.com/*
 // @grant        GM_setValue
@@ -120,9 +120,9 @@
       this.accessToken = accessToken;
     }
 
-    async fetchPlanItems(planId, serviceTypeId = "1557519", perPage = 100) {
+    async fetchPlanItems(planId, perPage = 100) {
       // include=arrangement ensures the arrangements are returned in `included`
-      const url = `https://api.planningcenteronline.com/services/v2/service_types/${serviceTypeId}/plans/${planId}/items?per_page=${perPage}&include=arrangement`;
+      const url = `https://api.planningcenteronline.com/services/v2/plans/${planId}/items?per_page=${perPage}&include=arrangement`;
 
       return new Promise((resolve, reject) => {
         GM_xmlhttpRequest({
